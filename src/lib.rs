@@ -87,12 +87,64 @@ impl<T, E: fmt::Display> fmt::Display for TryBytesChunksError<T, E> {
 impl<T, E: fmt::Debug + fmt::Display> std::error::Error for TryBytesChunksError<T, E> {}
 
 impl<T, E> TryBytesChunksError<T, E> {
-    pub fn into_leftover(self) -> T {
+    /// Returns the buffered data stored before the error.
+    /// ```
+    /// # use std::{convert::Infallible, vec::IntoIter};
+    /// # use bytes::Bytes;
+    /// # use futures::{
+    /// #     executor::block_on,
+    /// #     stream::{self, StreamExt},
+    /// # };
+    /// # use bytes_stream::BytesStream;
+    /// # fn main() {
+    /// # block_on(async {
+    /// let stream: stream::Iter<IntoIter<Result<Bytes, &'static str>>> =
+    ///     stream::iter(vec![
+    ///         Ok(Bytes::from_static(&[1, 2, 3])),
+    ///         Ok(Bytes::from_static(&[4, 5, 6])),
+    ///         Err("failure"),
+    ///     ]);
+    ///
+    /// let mut stream = stream.try_bytes_chunks(4);
+    ///
+    /// assert_eq!(stream.next().await, Some(Ok(Bytes::from_static(&[1, 2, 3, 4]))));
+    ///
+    /// let err = stream.next().await.unwrap().err().unwrap();
+    /// assert_eq!(err.into_inner(), Bytes::from_static(&[5, 6]));
+    /// # });
+    /// # }
+    /// ```
+    pub fn into_inner(self) -> T {
         self.0
     }
 }
 
 pub trait BytesStream: Stream {
+    /// Group bytes in chunks of `capacity`.
+    /// ```
+    /// # use bytes::Bytes;
+    /// # use futures::{
+    /// #     executor::block_on,
+    /// #     stream::{self, StreamExt},
+    /// # };
+    /// # use bytes_stream::BytesStream;
+    /// # fn main() {
+    /// # block_on(async {
+    /// let stream = futures::stream::iter(vec![
+    ///     Bytes::from_static(&[1, 2, 3]),
+    ///     Bytes::from_static(&[4, 5, 6]),
+    ///     Bytes::from_static(&[7, 8, 9]),
+    /// ]);
+    ///
+    /// let mut stream = stream.bytes_chunks(4);
+    ///
+    /// assert_eq!(stream.next().await, Some(Bytes::from_static(&[1, 2, 3, 4])));
+    /// assert_eq!(stream.next().await, Some(Bytes::from_static(&[5, 6, 7, 8])));
+    /// assert_eq!(stream.next().await, Some(Bytes::from_static(&[9])));
+    /// assert_eq!(stream.next().await, None);
+    /// # });
+    /// # }
+    /// ```
     fn bytes_chunks<T>(self, capacity: usize) -> BytesChunks<Self, T>
     where
         Self: Sized,
@@ -100,6 +152,32 @@ pub trait BytesStream: Stream {
         BytesChunks::with_capacity(capacity, self)
     }
 
+    /// Group result of bytes in chunks of `capacity`.
+    /// ```
+    /// # use std::convert::Infallible;
+    /// # use bytes::Bytes;
+    /// # use futures::{
+    /// #     executor::block_on,
+    /// #     stream::{self, StreamExt},
+    /// # };
+    /// # use bytes_stream::BytesStream;
+    /// # fn main() {
+    /// # block_on(async {
+    /// let stream = futures::stream::iter(vec![
+    ///     Ok::<_, Infallible>(Bytes::from_static(&[1, 2, 3])),
+    ///     Ok::<_, Infallible>(Bytes::from_static(&[4, 5, 6])),
+    ///     Ok::<_, Infallible>(Bytes::from_static(&[7, 8, 9])),
+    /// ]);
+    ///
+    /// let mut stream = stream.try_bytes_chunks(4);
+    ///
+    /// assert_eq!(stream.next().await, Some(Ok(Bytes::from_static(&[1, 2, 3, 4]))));
+    /// assert_eq!(stream.next().await, Some(Ok(Bytes::from_static(&[5, 6, 7, 8]))));
+    /// assert_eq!(stream.next().await, Some(Ok(Bytes::from_static(&[9]))));
+    /// assert_eq!(stream.next().await, None);
+    /// # });
+    /// # }
+    /// ```
     fn try_bytes_chunks<T, E>(self, capacity: usize) -> TryBytesChunks<Self, T, E>
     where
         Self: Sized,
@@ -390,7 +468,7 @@ mod test {
             let err = stream.next().await.unwrap();
             assert!(err.is_err());
             let err = err.err().unwrap();
-            assert_eq!(err.into_leftover(), Bytes::from_static(&[5, 6]));
+            assert_eq!(err.into_inner(), Bytes::from_static(&[5, 6]));
         });
     }
 }
