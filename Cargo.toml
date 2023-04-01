@@ -1,0 +1,18 @@
+[package]
+name = "bytes-stream"
+version = "0.0.1"
+edition = "2021"
+authors = ["Rodrigo Navarro <rnavarro@rnavarro.com.br>"]
+license = "MIT"
+description = "Utility functions to work with stream of bytes"
+repository = "https://github.com/reu/bytes-stream"
+categories = ["asynchronous", "network-programming"]
+keywords = ["io", "stream", "buffers"]
+
+[dependencies]
+bytes = "1"
+futures-core = "0.3"
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+futures = "0.3.28"
