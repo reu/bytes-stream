@@ -383,6 +383,7 @@ mod test {
         executor::block_on,
         stream::{self, StreamExt},
     };
+    use futures_test::{assert_stream_done, assert_stream_next};
 
     use super::BytesStream;
 
@@ -397,10 +398,10 @@ mod test {
 
             let mut stream = stream.bytes_chunks(4);
 
-            assert_eq!(stream.next().await, Some(Bytes::from_static(&[1, 2, 3, 4])));
-            assert_eq!(stream.next().await, Some(Bytes::from_static(&[5, 6, 7, 8])));
-            assert_eq!(stream.next().await, Some(Bytes::from_static(&[9])));
-            assert_eq!(stream.next().await, None);
+            assert_stream_next!(stream, Bytes::from_static(&[1, 2, 3, 4]));
+            assert_stream_next!(stream, Bytes::from_static(&[5, 6, 7, 8]));
+            assert_stream_next!(stream, Bytes::from_static(&[9]));
+            assert_stream_done!(stream);
         });
     }
 
@@ -416,10 +417,10 @@ mod test {
 
             let mut stream = stream.bytes_chunks(4);
 
-            assert_eq!(stream.next().await, Some(vec![1, 2, 3, 4]));
-            assert_eq!(stream.next().await, Some(vec![5, 6, 7, 8]));
-            assert_eq!(stream.next().await, Some(vec![9]));
-            assert_eq!(stream.next().await, None);
+            assert_stream_next!(stream, vec![1, 2, 3, 4]);
+            assert_stream_next!(stream, vec![5, 6, 7, 8]);
+            assert_stream_next!(stream, vec![9]);
+            assert_stream_done!(stream);
         });
     }
 
@@ -435,16 +436,10 @@ mod test {
 
             let mut stream = stream.try_bytes_chunks(4);
 
-            assert_eq!(
-                stream.next().await,
-                Some(Ok(Bytes::from_static(&[1, 2, 3, 4])))
-            );
-            assert_eq!(
-                stream.next().await,
-                Some(Ok(Bytes::from_static(&[5, 6, 7, 8])))
-            );
-            assert_eq!(stream.next().await, Some(Ok(Bytes::from_static(&[9]))));
-            assert_eq!(stream.next().await, None);
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[1, 2, 3, 4])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[5, 6, 7, 8])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[9])));
+            assert_stream_done!(stream);
         });
     }
 
@@ -460,10 +455,7 @@ mod test {
 
             let mut stream = stream.try_bytes_chunks(4);
 
-            assert_eq!(
-                stream.next().await,
-                Some(Ok(Bytes::from_static(&[1, 2, 3, 4])))
-            );
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[1, 2, 3, 4])));
 
             let err = stream.next().await.unwrap();
             assert!(err.is_err());
