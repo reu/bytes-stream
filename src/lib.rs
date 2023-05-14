@@ -194,6 +194,10 @@ impl<E, St: Stream<Item = Result<Bytes, E>>> Stream for TryBytesChunks<St, Bytes
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
 
+        if this.buffer.len() >= *this.capacity {
+            return Poll::Ready(Some(Ok(self.take())));
+        }
+
         loop {
             match this.stream.as_mut().poll_next(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -240,6 +244,10 @@ impl<St: Stream<Item = Bytes>> Stream for BytesChunks<St, Bytes> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
 
+        if this.buffer.len() >= *this.capacity {
+            return Poll::Ready(Some(self.take()));
+        }
+
         loop {
             match this.stream.as_mut().poll_next(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -279,6 +287,10 @@ impl<St: Stream<Item = Vec<u8>>> Stream for BytesChunks<St, Vec<u8>> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
+
+        if this.buffer.len() >= *this.capacity {
+            return Poll::Ready(Some(self.take()));
+        }
 
         loop {
             match this.stream.as_mut().poll_next(cx) {
@@ -320,6 +332,10 @@ impl<E, St: Stream<Item = Result<Vec<u8>, E>>> Stream for TryBytesChunks<St, Vec
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.as_mut().project();
+
+        if this.buffer.len() >= *this.capacity {
+            return Poll::Ready(Some(Ok(self.take())));
+        }
 
         loop {
             match this.stream.as_mut().poll_next(cx) {
@@ -388,7 +404,7 @@ mod test {
     use super::BytesStream;
 
     #[test]
-    fn test_bytes_chunks() {
+    fn test_bytes_chunks_lengthen() {
         block_on(async {
             let stream = futures::stream::iter(vec![
                 Bytes::from_static(&[1, 2, 3]),
@@ -406,7 +422,27 @@ mod test {
     }
 
     #[test]
-    fn test_vec_chunks() {
+    fn test_bytes_chunks_shorten() {
+        block_on(async {
+            let stream = futures::stream::iter(vec![
+                Bytes::from_static(&[1, 2, 3]),
+                Bytes::from_static(&[4, 5, 6]),
+                Bytes::from_static(&[7, 8, 9]),
+            ]);
+
+            let mut stream = stream.bytes_chunks(2);
+
+            assert_stream_next!(stream, Bytes::from_static(&[1, 2]));
+            assert_stream_next!(stream, Bytes::from_static(&[3, 4]));
+            assert_stream_next!(stream, Bytes::from_static(&[5, 6]));
+            assert_stream_next!(stream, Bytes::from_static(&[7, 8]));
+            assert_stream_next!(stream, Bytes::from_static(&[9]));
+            assert_stream_done!(stream);
+        });
+    }
+
+    #[test]
+    fn test_vec_chunks_lengthen() {
         block_on(async {
             #[rustfmt::skip]
             let stream = futures::stream::iter(vec![
@@ -425,7 +461,28 @@ mod test {
     }
 
     #[test]
-    fn test_try_bytes_chunks() {
+    fn test_vec_chunks_shorten() {
+        block_on(async {
+            #[rustfmt::skip]
+            let stream = futures::stream::iter(vec![
+                vec![1, 2, 3],
+                vec![4, 5, 6],
+                vec![7, 8, 9],
+            ]);
+
+            let mut stream = stream.bytes_chunks(2);
+
+            assert_stream_next!(stream, vec![1, 2]);
+            assert_stream_next!(stream, vec![3, 4]);
+            assert_stream_next!(stream, vec![5, 6]);
+            assert_stream_next!(stream, vec![7, 8]);
+            assert_stream_next!(stream, vec![9]);
+            assert_stream_done!(stream);
+        });
+    }
+
+    #[test]
+    fn test_try_bytes_chunks_lengthen() {
         block_on(async {
             let stream: stream::Iter<std::vec::IntoIter<Result<Bytes, Infallible>>> =
                 stream::iter(vec![
@@ -438,6 +495,27 @@ mod test {
 
             assert_stream_next!(stream, Ok(Bytes::from_static(&[1, 2, 3, 4])));
             assert_stream_next!(stream, Ok(Bytes::from_static(&[5, 6, 7, 8])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[9])));
+            assert_stream_done!(stream);
+        });
+    }
+
+    #[test]
+    fn test_try_bytes_chunks_shorten() {
+        block_on(async {
+            let stream: stream::Iter<std::vec::IntoIter<Result<Bytes, Infallible>>> =
+                stream::iter(vec![
+                    Ok(Bytes::from_static(&[1, 2, 3])),
+                    Ok(Bytes::from_static(&[4, 5, 6])),
+                    Ok(Bytes::from_static(&[7, 8, 9])),
+                ]);
+
+            let mut stream = stream.try_bytes_chunks(2);
+
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[1, 2])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[3, 4])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[5, 6])));
+            assert_stream_next!(stream, Ok(Bytes::from_static(&[7, 8])));
             assert_stream_next!(stream, Ok(Bytes::from_static(&[9])));
             assert_stream_done!(stream);
         });
